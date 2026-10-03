@@ -1,0 +1,52 @@
+# macOS
+**/.DS_Store
+
+# Dev build
+build/
+tmp/
+dist/
+
+# Logs
+*.log
+logs/
+
+# Test / coverage
+*.out
+coverage/
+
+# Environment variables (local only — examples stay tracked)
+.env
+.env*
+!.env.example
+!.env.test
+data/
+.venv/
+.cache/
+
+# Python bytecode (kept centralized in .cache/ when entrypoints run)
+__pycache__/
+*.py[cod]
+
+# Frontend build artifacts (webui/)
+node_modules/
+.next/
+
+# Uploaded files
+media/
+
+# Local databases (outside data/)
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+
+# Editor
+.vscode/
+.idea/
+*.sw?
+
+# Misc.
+.opencode/
+.mindmodel/
+thoughts/
+TODO.md

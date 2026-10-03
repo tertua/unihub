@@ -1,0 +1,7 @@
+django>=5.0
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+drf-spectacular
+django-environ
+psycopg[binary]        # driver PostgreSQL — dipakai sejak fase scaffolding
