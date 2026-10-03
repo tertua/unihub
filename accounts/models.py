@@ -38,6 +38,14 @@ class User(AbstractUser):
         null=True,
         blank=True,
     )
+    # OIDC `sub` claim from a campus IdP. NULL while auth is local-only, so a
+    # future SSO login can claim existing accounts without a data migration.
+    oidc_subject = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        unique=True,
+    )
 
     def save(self, *args, **kwargs):
         # createsuperuser never sets `role`; keep superusers consistent so

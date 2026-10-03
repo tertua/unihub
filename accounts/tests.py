@@ -164,6 +164,17 @@ class ModelTests(APITestCase):
         self.assertTrue(user.is_superuser)
         self.assertEqual(user.role, User.Role.ADMIN)
 
+    def test_oidc_subject_is_null_until_an_idp_claims_it(self):
+        # Local password accounts carry no IdP identity yet.
+        user = User.objects.create_user(username="bob", password=PASSWORD)
+
+        self.assertIsNone(user.oidc_subject)
+
+        user.oidc_subject = "campus|12345"
+        user.save()
+        user.refresh_from_db()
+        self.assertEqual(user.oidc_subject, "campus|12345")
+
 
 class MeTests(APITestCase):
     def setUp(self):
