@@ -3,6 +3,10 @@
 # CI cannot judge (dropped Python support, changed build output), so a human
 # reads them first.
 #
+# The gate is a whitelist (minor/patch only), not "not major": requirement-
+# range updates (Django `>=5.0` -> `>=6.1.1`) come through fetch-metadata with
+# an EMPTY update-type, and a "not major" check would let those majors merge.
+#
 # Why pull_request_target: Dependabot-triggered `pull_request` runs get a
 # read-only token, so the merge call would 403. pull_request_target runs with
 # the base branch's write token, and this workflow never checks out PR code —
@@ -35,7 +39,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Wait for checks, then squash-merge minor/patch
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        if: steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch'
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -65,6 +69,6 @@ jobs:
           fi
           gh pr merge "$PR_URL" --squash --delete-branch
 
-      - name: Leave major updates for manual review
-        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
-        run: echo "major version bump - human review required, not merging"
+      - name: Leave non-patch/minor updates for manual review
+        if: steps.metadata.outputs.update-type != 'version-update:semver-minor' && steps.metadata.outputs.update-type != 'version-update:semver-patch'
+        run: echo "update-type is '${{ steps.metadata.outputs.update-type }}' (major or requirement-range bump) - human review required, not merging"
