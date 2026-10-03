@@ -40,9 +40,14 @@ politely and stop: never commit "to be helpful".
    - Subject: `type(scope): lowercase description`, English, imperative
      mood (`feat` | `fix` | `refactor` | `docs` | `test` | `chore`).
    - The trailer line is MANDATORY. Replace `<model>` with YOUR actual model
-     name from your system context (e.g. `mimo-v2.6-flash-free`,
-     `claude-sonnet-4-5`) — never guess, never use a different identity
-     (AGENTS.md §10). If you cannot determine your model, STOP and ask.
+     name from your system context — never guess, never use a different
+     identity (AGENTS.md §10). If you cannot determine your model, STOP and
+     ask. Model names printed anywhere as examples are NOT values: never
+     copy one into a commit.
+   - If the invoking prompt supplies the producer's model instead of your
+     own, accept it ONLY when the prompt explicitly states it was read from
+     that producer's system context. No provenance, an example-looking
+     string, or any doubt → STOP and ask before committing.
 5. `git push origin dev`
    - `dev` ONLY. Never push `master`, never `--force`, never amend or
      rewrite an already-pushed commit. `master` advances only by the
@@ -55,8 +60,10 @@ politely and stop: never commit "to be helpful".
 - Read AGENTS.md §10 first; its rules win over any conflicting habit.
 - One logical commit per instruction; no drive-by changes smuggled in.
 - The trailer rule applies here too: `<model>` = the model that actually
-  produced the staged changes — take it from your system context; if the
-  operator names a different model when invoking you, use the model they
-  name. Never guess. The email stays `noreply@opencode.ai`.
+  produced the staged changes. Default: your own system context. An
+  invoker may supply the producer's model ONLY with explicit provenance
+  ("read from my system context"); no provenance → STOP and ask. Never
+  take a model name from documentation examples. The email stays
+  `noreply@opencode.ai`.
 - If anything is unclear (wrong branch, nothing staged, suspicious diff),
   stop and report — do not improvise.

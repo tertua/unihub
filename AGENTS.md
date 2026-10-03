@@ -277,11 +277,21 @@ present and future.
 - **Agent commit trailer:** every agent-made commit ends with the trailer
   `Co-authored-by: <model> <noreply@opencode.ai>` as the last paragraph of
   the message, where `<model>` is the model that actually produced the
-  change — read it from your own system context (e.g.
-  `mimo-v2.6-flash-free`, `claude-sonnet-4-5`); never guess, never use
+  change — read it from your own system context; never guess, never use
   another identity. Human commits omit the trailer. The email part stays
   constant so agent work remains greppable across models:
   `git log --grep noreply@opencode.ai`.
+  - **The strings in parentheses anywhere in this file (or in any agent
+    file) are *examples*, never values.** Copying an example model name
+    into a prompt or a commit message is exactly the violation this rule
+    exists to prevent (it happened once; do not repeat it).
+  - An agent that *invokes* the committer states the producing model only
+    after reading it from its own system context, and says so. For changes
+    produced through subagents, the session's commander stamps its own
+    model identity — it owns and verified the work.
+  - If the committer cannot tell where a model string came from, or the
+    invoking prompt offers one without provenance, it **stops and asks**
+    instead of committing.
 - **Commit execution:** local commit+push runs through the `committer`
   subagent (`.opencode/agents/committer.md`) when the operator mentions it.
   Every other agent stages its work, shows `git diff --cached`, and waits —
