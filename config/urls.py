@@ -6,6 +6,8 @@ frontend and (later) the academic system integration consume, see
 docs/adr/002-frontend-consumes-public-api.md.
 """
 
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -15,6 +17,7 @@ urlpatterns = [
 
     # API v1 — add every new app's urls here under /api/v1/.
     path("api/v1/auth/", include("accounts.urls")),
+    path("api/v1/material/", include("materials.urls")),
 
     # OpenAPI schema + interactive docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
@@ -24,3 +27,7 @@ urlpatterns = [
         name="swagger-ui",
     ),
 ]
+
+# Dev only: Django never serves media when DEBUG is False.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

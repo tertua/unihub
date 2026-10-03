@@ -57,9 +57,11 @@ Current state (MVP):
 | --- | --- |
 | Django backend + `/api/v1/` auth API | complete |
 | `accounts` app (custom user, roles, NIM/NIP) | complete |
-| `materials`, `tools`, `chat`, `spaces` apps | scaffold only (empty packages) |
+| `materials` app (models, API, tests) | implemented — Material Hub API |
+| `tools`, `chat`, `spaces` apps | scaffold only (empty packages) |
 | `webui/` App Shell (Next.js) | complete, wired to real JWT API |
-| Material upload, RAG chat, spaces | **future phases — do not build them now** |
+| Material upload (Material Hub API) | **implemented** — `materials` app, `/api/v1/material/` |
+| RAG chat, spaces | **future phases — do not build them now** |
 
 Architecture decisions are mandatory reading:
 

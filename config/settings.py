@@ -138,6 +138,12 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+
+# Media files (uploaded materials). Local disk in dev; remote storage is out of
+# scope for the MVP (see docs/adr/ and the Material Hub design).
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
