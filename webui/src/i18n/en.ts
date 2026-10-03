@@ -72,6 +72,11 @@ export const en = {
 
   errors: {
     incorrectCredentials: 'Incorrect username or password.',
+    sessionExpired: 'Your session has expired. Please sign in again.',
+    forbidden: 'You do not have permission to do this.',
+    notFound: 'This item no longer exists.',
+    server: 'The server had a problem. Please try again.',
+    retry: 'Retry',
     generic: 'Something went wrong, please try again.',
     unreachable: 'Could not reach the server.'
   },
@@ -160,6 +165,11 @@ export const en = {
       file: 'File',
       link: 'Drive link'
     },
+    pagination: {
+      previous: 'Previous',
+      next: 'Next',
+      pageOf: (page: number, total: number) => `Page ${page} of ${total}`
+    },
     browse: {
       title: 'Browse Drive',
       description: 'Pick a file from your Shared Drive.',
@@ -169,8 +179,16 @@ export const en = {
       loading: 'Loading…',
       empty: 'This folder is empty.',
       unavailable: 'Drive integration is not configured.',
+      errorServer: 'The Drive API returned an error. Please try again.',
       truncated: 'Showing the first 100 items.',
       error: 'Could not load this folder.'
+    },
+    fieldLabels: {
+      title: 'Title',
+      course: 'Course',
+      description: 'Description',
+      file: 'File',
+      source_url: 'Google Drive link'
     }
   },
 

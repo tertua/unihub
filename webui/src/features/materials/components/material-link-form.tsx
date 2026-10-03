@@ -37,6 +37,18 @@ const linkMaterialSchema = (m: Messages['materials']['form']) =>
 
 type LinkMaterialValues = z.infer<ReturnType<typeof linkMaterialSchema>>;
 
+/**
+ * Human label for a server field-error key. Known keys get a localized label
+ * (the backend keys the required-source error under both `file` and
+ * `source_url`); anything unknown falls back to the raw key so no error is lost.
+ */
+function fieldLabel(
+  key: string,
+  labels: Messages['materials']['fieldLabels']
+): string {
+  return labels[key as keyof Messages['materials']['fieldLabels']] ?? key;
+}
+
 const defaultValues: LinkMaterialValues = {
   title: '',
   course: '',
@@ -77,7 +89,11 @@ export function MaterialLinkForm({ onCancel }: { onCancel?: () => void }) {
         form.reset();
         toast.success(t.materials.form.created);
       } catch (error) {
-        const { fieldErrors: fe, formError: formMessage } = parseApiError(error, t.errors);
+        const { fieldErrors: fe, formError: formMessage } = parseApiError(
+          error,
+          t.errors,
+          'generic'
+        );
         setFieldErrors(fe);
         setFormError(formMessage);
       }
@@ -145,12 +161,14 @@ export function MaterialLinkForm({ onCancel }: { onCancel?: () => void }) {
             )}
           />
 
-          {fieldErrors.source_url && (
-            <p className='text-destructive text-xs'>{fieldErrors.source_url.join(' ')}</p>
-          )}
-          {fieldErrors.title && (
-            <p className='text-destructive text-xs'>{fieldErrors.title.join(' ')}</p>
-          )}
+          {Object.entries(fieldErrors).map(([field, messages]) => (
+            <p key={field} className='text-destructive text-xs'>
+              <span className='font-medium'>
+                {fieldLabel(field, t.materials.fieldLabels)}:{' '}
+              </span>
+              {messages.join(' ')}
+            </p>
+          ))}
           {formError && <p className='text-destructive text-sm'>{formError}</p>}
 
           <p className='text-muted-foreground text-xs'>{t.materials.form.sourceNote}</p>

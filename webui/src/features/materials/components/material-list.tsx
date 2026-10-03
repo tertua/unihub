@@ -8,10 +8,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { deleteMaterial, listMaterials } from '@/features/materials/api/service';
 import type { Material } from '@/features/materials/api/types';
 import { MaterialCard } from '@/features/materials/components/material-card';
+import type { Messages } from '@/i18n/en';
 import { useMessages } from '@/i18n/use-messages';
+import { ApiRequestError } from '@/lib/api-client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { toast } from 'sonner';
+
+/** Matches the backend's `PAGE_SIZE` (DRF `PageNumberPagination`). */
+const PAGE_SIZE = 20;
 
 function MaterialListSkeleton() {
   return (
@@ -28,10 +33,20 @@ function MaterialListSkeleton() {
   );
 }
 
+/** Status-aware copy for a failed delete (403/404/5xx get their own message). */
+function deleteErrorMessage(error: unknown, errors: Messages['errors']): string {
+  if (error instanceof ApiRequestError) {
+    if (error.status === 403) return errors.forbidden;
+    if (error.status === 404) return errors.notFound;
+    if (error.status >= 500) return errors.server;
+  }
+  return errors.generic;
+}
+
 /**
  * Real material list. Loading shows skeletons, an empty list is an honest empty
- * state (never mock rows), and errors surface a localized message — the feature
- * is implemented; an empty result is genuinely empty.
+ * state (never mock rows), and errors surface a localized message with a retry
+ * action — the feature is implemented; an empty result is genuinely empty.
  */
 export function MaterialList({
   canManage,
@@ -42,11 +57,12 @@ export function MaterialList({
 }) {
   const t = useMessages();
   const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
   const [pendingDelete, setPendingDelete] = useState<Material | null>(null);
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['materials'],
-    queryFn: listMaterials
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['materials', page],
+    queryFn: () => listMaterials(page)
   });
 
   const removeMutation = useMutation({
@@ -55,9 +71,9 @@ export function MaterialList({
       await queryClient.invalidateQueries({ queryKey: ['materials'] });
       setPendingDelete(null);
     },
-    onError: () => {
+    onError: (error) => {
       setPendingDelete(null);
-      toast.error(t.errors.generic);
+      toast.error(deleteErrorMessage(error, t.errors));
     }
   });
 
@@ -71,12 +87,17 @@ export function MaterialList({
         <CardHeader>
           <CardTitle>{t.materials.title}</CardTitle>
           <CardDescription>{t.errors.generic}</CardDescription>
+          <Button variant='outline' size='sm' onClick={() => void refetch()}>
+            {t.errors.retry}
+          </Button>
         </CardHeader>
       </Card>
     );
   }
 
   const materials = data?.results ?? [];
+  const count = data?.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
   if (materials.length === 0) {
     return (
@@ -111,6 +132,30 @@ export function MaterialList({
             onDelete={setPendingDelete}
           />
         ))}
+      </div>
+
+      <div className='flex items-center justify-between gap-4 pt-2'>
+        <Button
+          variant='outline'
+          size='sm'
+          disabled={data?.previous === null || page <= 1}
+          onClick={() => setPage((current) => Math.max(1, current - 1))}
+        >
+          <Icons.chevronLeft data-icon='inline-start' />
+          {t.materials.pagination.previous}
+        </Button>
+        <span className='text-muted-foreground text-sm'>
+          {t.materials.pagination.pageOf(page, totalPages)}
+        </span>
+        <Button
+          variant='outline'
+          size='sm'
+          disabled={data?.next === null || page >= totalPages}
+          onClick={() => setPage((current) => current + 1)}
+        >
+          {t.materials.pagination.next}
+          <Icons.chevronRight data-icon='inline-end' />
+        </Button>
       </div>
 
       <AlertModal

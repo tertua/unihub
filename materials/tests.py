@@ -3,7 +3,9 @@ import urllib.error
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import IntegrityError, transaction
 from django.test import SimpleTestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -1022,3 +1024,224 @@ class DriveBrowseServiceTests(SimpleTestCase):
         self.assertIn("corpora=drive", sent)
         self.assertNotIn("in parents", sent)
         self.assertIsNone(parent)
+
+
+class DeleteFileBestEffortTests(SimpleTestCase):
+    """`drive.delete_file` never raises: a Drive-side failure is swallowed."""
+
+    def _delete(self, side_effect):
+        with mock.patch("materials.drive.get_access_token", return_value="tok"), \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = side_effect
+            result = drive.delete_file(DRIVE_FILE_ID)
+        return result, urlopen
+
+    def test_success_returns_none_and_calls_once(self):
+        result, urlopen = self._delete(None)
+
+        self.assertIsNone(result)
+        self.assertEqual(urlopen.call_count, 1)
+
+    def test_http_404_is_swallowed(self):
+        result, _ = self._delete(
+            urllib.error.HTTPError("https://www.googleapis.com", 404, "Not Found", {}, None)
+        )
+        self.assertIsNone(result)
+
+    def test_http_500_is_swallowed(self):
+        result, _ = self._delete(
+            urllib.error.HTTPError("https://www.googleapis.com", 500, "boom", {}, None)
+        )
+        self.assertIsNone(result)
+
+    def test_url_error_is_swallowed(self):
+        result, _ = self._delete(urllib.error.URLError("unreachable"))
+        self.assertIsNone(result)
+
+    def test_token_mint_failure_is_swallowed(self):
+        # The token exchange is the first network hop of a delete; if it fails
+        # the row is already gone, so it must not resurface as a 500.
+        with mock.patch(
+            "materials.drive.get_access_token", side_effect=RuntimeError("no token")
+        ), mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            result = drive.delete_file(DRIVE_FILE_ID)
+
+        self.assertIsNone(result)
+        urlopen.assert_not_called()
+
+
+class MaterialDeleteToleranceTests(MaterialTestCase):
+    """Regression: a Drive delete failure must not 500 an already-deleted row."""
+
+    def test_lecturer_delete_succeeds_when_drive_delete_fails(self):
+        material = Material.objects.create(
+            title="Stored on Drive",
+            course="CS101",
+            file=DRIVE_FILE_ID,
+            owner=self.lecturer,
+        )
+        self.auth("lecturer")
+
+        with mock.patch(
+            "materials.storage.drive.delete_file",
+            side_effect=urllib.error.HTTPError(
+                "https://www.googleapis.com", 500, "boom", {}, None
+            ),
+        ):
+            response = self.client.delete(material_detail_url(material.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Material.objects.filter(pk=material.pk).exists())
+
+
+class FileReplacementTests(MaterialTestCase):
+    """PATCH replacing `file` deletes the previous object instead of orphaning it."""
+
+    def test_patch_replacing_file_deletes_old_object(self):
+        material = self.create_material()
+        old_path = material.file.path
+        self.assertTrue(material.file.storage.exists(material.file.name))
+        self.auth("lecturer")
+
+        response = self.client.patch(
+            material_detail_url(material.pk),
+            {"title": "Updated", "file": pdf_upload("replacement.pdf")},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        material.refresh_from_db()
+        self.assertNotEqual(material.file.path, old_path)
+        self.assertFalse(material.file.storage.exists(old_path))
+
+    def test_metadata_only_patch_keeps_file(self):
+        material = self.create_material()
+        stored_name = material.file.name
+        self.auth("lecturer")
+
+        response = self.client.patch(
+            material_detail_url(material.pk),
+            {"description": "notes"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        material.refresh_from_db()
+        self.assertEqual(material.file.name, stored_name)
+
+    def test_storage_delete_failure_does_not_break_patch(self):
+        material = self.create_material()
+        self.auth("lecturer")
+
+        with mock.patch(
+            "django.core.files.storage.FileSystemStorage.delete",
+            side_effect=OSError("disk error"),
+        ):
+            response = self.client.patch(
+                material_detail_url(material.pk),
+                {"file": pdf_upload("replacement.pdf")},
+                format="multipart",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class SourceXorConstraintTests(MaterialTestCase):
+    """The DB backstops the serializer's exactly-one-source rule."""
+
+    def test_both_sources_violate_constraint(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Material.objects.create(
+                title="Both",
+                file=DRIVE_FILE_ID,
+                source_url=DRIVE_FILE_URL,
+                owner=self.lecturer,
+            )
+
+    def test_neither_source_violates_constraint(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Material.objects.create(title="Neither", owner=self.lecturer)
+
+    def test_file_only_row_is_accepted(self):
+        material = Material.objects.create(
+            title="File only", file=DRIVE_FILE_ID, owner=self.lecturer
+        )
+        self.assertIsNotNone(material.pk)
+
+    def test_link_only_row_is_accepted(self):
+        material = Material.objects.create(
+            title="Link only",
+            source_url=DRIVE_FILE_URL,
+            drive_file_id=DRIVE_FILE_ID,
+            owner=self.lecturer,
+        )
+        self.assertIsNotNone(material.pk)
+
+
+class MetadataCacheTests(SimpleTestCase):
+    """B4: successful Drive metadata lookups are cached; failures never are."""
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+        super().tearDown()
+
+    @override_settings(GOOGLE_DRIVE_API_KEY="fake-key")
+    def test_cache_hit_avoids_second_outbound_call(self):
+        with mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _fake_response(
+                {"name": "week1.pdf", "mimeType": "application/pdf"}
+            )
+            first = drive.fetch_metadata(DRIVE_FILE_ID)
+            second = drive.fetch_metadata(DRIVE_FILE_ID)
+
+        self.assertEqual(first, {"name": "week1.pdf", "mime_type": "application/pdf"})
+        self.assertEqual(second, first)
+        self.assertEqual(urlopen.call_count, 1)
+
+    @override_settings(GOOGLE_DRIVE_API_KEY="fake-key")
+    def test_failure_is_not_cached(self):
+        with mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = [
+                urllib.error.HTTPError("https://www.googleapis.com", 503, "boom", {}, None),
+                _fake_response({"name": "week1.pdf", "mimeType": "application/pdf"}),
+            ]
+            first = drive.fetch_metadata(DRIVE_FILE_ID)
+            second = drive.fetch_metadata(DRIVE_FILE_ID)
+
+        self.assertIsNone(first)
+        self.assertEqual(second, {"name": "week1.pdf", "mime_type": "application/pdf"})
+        self.assertEqual(urlopen.call_count, 2)
+
+    @override_settings(GOOGLE_DRIVE_API_KEY="")
+    def test_unconfigured_makes_no_call_and_writes_no_cache(self):
+        with mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            first = drive.fetch_metadata(DRIVE_FILE_ID)
+            second = drive.fetch_metadata(DRIVE_FILE_ID)
+
+        self.assertIsNone(first)
+        self.assertIsNone(second)
+        urlopen.assert_not_called()
+        self.assertIsNone(cache.get(drive._metadata_cache_key(DRIVE_FILE_ID)))
+
+
+class SerializerMetadataSingleFetchTests(LinkMaterialTestCase):
+    """The two drive_* fields resolve one metadata fetch per object."""
+
+    @override_settings(GOOGLE_DRIVE_API_KEY="fake-key")
+    def test_two_drive_fields_fetch_once(self):
+        cache.clear()
+        material = self.create_link_material()
+        with mock.patch(
+            "materials.drive.fetch_metadata",
+            return_value={"name": "week1.pdf", "mime_type": "application/pdf"},
+        ) as fetch:
+            data = MaterialSerializer(material).data
+
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(data["drive_name"], "week1.pdf")
+        self.assertEqual(data["drive_mime_type"], "application/pdf")
+        cache.clear()

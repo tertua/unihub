@@ -14,9 +14,10 @@ import type {
   Paginated
 } from './types';
 
-/** Lists materials (DRF paginated envelope). */
-export async function listMaterials(): Promise<Paginated<Material>> {
-  return apiClient<Paginated<Material>>('/material/');
+/** Lists materials (DRF paginated envelope), one page at a time. */
+export async function listMaterials(page = 1): Promise<Paginated<Material>> {
+  const query = page > 1 ? `?page=${page}` : '';
+  return apiClient<Paginated<Material>>(`/material/${query}`);
 }
 
 /** Creates a link material (JSON body — no multipart branch in `apiClient`). */

@@ -72,6 +72,11 @@ export const id: Messages = {
 
   errors: {
     incorrectCredentials: 'Username atau password salah.',
+    sessionExpired: 'Sesi Anda sudah berakhir. Silakan masuk lagi.',
+    forbidden: 'Anda tidak punya izin untuk melakukan ini.',
+    notFound: 'Item ini sudah tidak ada lagi.',
+    server: 'Server mengalami masalah. Silakan coba lagi.',
+    retry: 'Coba lagi',
     generic: 'Terjadi kesalahan, silakan coba lagi.',
     unreachable: 'Tidak bisa terhubung ke server.'
   },
@@ -159,6 +164,11 @@ export const id: Messages = {
       file: 'Berkas',
       link: 'Tautan Drive'
     },
+    pagination: {
+      previous: 'Sebelumnya',
+      next: 'Berikutnya',
+      pageOf: (page: number, total: number) => `Halaman ${page} dari ${total}`
+    },
     browse: {
       title: 'Telusuri Drive',
       description: 'Pilih berkas dari Shared Drive Anda.',
@@ -168,8 +178,16 @@ export const id: Messages = {
       loading: 'Memuat…',
       empty: 'Folder ini kosong.',
       unavailable: 'Integrasi Drive belum dikonfigurasi.',
+      errorServer: 'Drive API mengembalikan kesalahan. Silakan coba lagi.',
       truncated: 'Menampilkan 100 item pertama.',
       error: 'Tidak dapat memuat folder ini.'
+    },
+    fieldLabels: {
+      title: 'Judul',
+      course: 'Mata Kuliah',
+      description: 'Deskripsi',
+      file: 'Berkas',
+      source_url: 'Tautan Google Drive'
     }
   },
 

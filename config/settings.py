@@ -173,6 +173,17 @@ STORAGES = {
     },
 }
 
+# Cache — explicit so the choice survives Django default changes (B4/D4).
+# LocMemCache lives in this process only: a multi-worker deploy would need a
+# shared backend (Redis/DB), which is out of scope for this batch.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "faculty-hub",
+    },
+}
+
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 

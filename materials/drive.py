@@ -19,9 +19,11 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import re
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -30,6 +32,9 @@ from typing import Literal
 import jwt
 
 from django.conf import settings
+from django.core.cache import cache
+
+logger = logging.getLogger(__name__)
 
 # --- Token minting (service account, OAuth2 JWT-bearer) ---------------------
 
@@ -44,6 +49,11 @@ _FOLDER_MIME = "application/vnd.google-apps.folder"
 _LIST_FIELDS = "nextPageToken, files(id, name, mimeType)"
 _LIST_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
 _BROWSE_PAGE_SIZE = 100
+
+# Metadata enrichment is best-effort and cheap to recompute; 5 minutes matches
+# the token-refresh margin and keeps a renamed/moved file self-healing quickly
+# while sparing a list page plus the following detail view a second fetch.
+_METADATA_TTL_SECONDS = 300
 
 # In-process cache: {"access_token": str, "expires_at": float (epoch seconds)}
 _token_cache: dict = {}
@@ -176,16 +186,30 @@ def is_configured() -> bool:
     return bool(settings.GOOGLE_DRIVE_SERVICE_ACCOUNT_B64)
 
 
+def _metadata_cache_key(file_id: str) -> str:
+    """Namespaced, stable cache key for one Drive file's metadata."""
+    return f"drive_meta:{file_id}"
+
+
 def fetch_metadata(file_id: str) -> dict | None:
     """Best-effort metadata lookup for `file_id`, or `None`.
 
     Only runs when an API key is configured; every failure is swallowed so a
-    dead Google endpoint can never break a read. Returns
+    dead Google endpoint can never break a read. Successful lookups are cached
+    for `_METADATA_TTL_SECONDS`; failures are **never** cached, so a transient
+    outage cannot pin `None` for the whole TTL. Returns
     `{"name": ..., "mime_type": ...}`.
     """
     api_key = settings.GOOGLE_DRIVE_API_KEY
+    # Unconfigured must stay zero-network and zero-cache (hard contract).
     if not api_key or not file_id:
         return None
+
+    cache_key = _metadata_cache_key(file_id)
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     url = (
         "https://www.googleapis.com/drive/v3/files/"
         f"{urllib.parse.quote(file_id)}?fields=name,mimeType&key="
@@ -196,10 +220,13 @@ def fetch_metadata(file_id: str) -> dict | None:
             payload = json.loads(response.read().decode("utf-8"))
     except Exception:
         return None
-    return {
+    result = {
         "name": payload.get("name"),
         "mime_type": payload.get("mimeType"),
     }
+    # Cache successes only: a failure must not be pinned for the whole TTL.
+    cache.set(cache_key, result, _METADATA_TTL_SECONDS)
+    return result
 
 
 def _service_account_info() -> dict:
@@ -287,12 +314,32 @@ def upload_file(filename, data: bytes, folder_id: str, shared_drive_id: str = ""
 
 
 def delete_file(file_id: str) -> None:
-    """Delete a Drive file by id (Shared-Drive aware)."""
-    req = _authorized_request(
-        f"https://www.googleapis.com/drive/v3/files/{file_id}?supportsAllDrives=true",
-        method="DELETE",
-    )
-    urllib.request.urlopen(req, timeout=10)
+    """Delete a Drive file by id (Shared-Drive aware), best-effort.
+
+    The row deletion has already succeeded by the time Django's FileField
+    post-delete signal reaches us, so nothing here may raise: a 404/410 means
+    the object is already gone (goal reached), any other transport/HTTP error
+    is transient, and a failed token mint is the same kind of outage. Every
+    failure is logged and swallowed.
+    """
+    try:
+        req = _authorized_request(
+            f"https://www.googleapis.com/drive/v3/files/{file_id}?supportsAllDrives=true",
+            method="DELETE",
+        )
+        urllib.request.urlopen(req, timeout=10)
+    except urllib.error.HTTPError as error:
+        if error.code in (404, 410):
+            logger.info("Drive file %s already gone (HTTP %s).", file_id, error.code)
+        else:
+            logger.warning(
+                "Drive delete failed for %s (HTTP %s); left as-is.", file_id, error.code
+            )
+    except (urllib.error.URLError, OSError) as error:
+        logger.warning("Drive delete unreachable for %s (%s); left as-is.", file_id, error)
+    except Exception as error:
+        # Token minting and friends: still best-effort, but never silent.
+        logger.warning("Drive delete skipped for %s (%s); left as-is.", file_id, error)
 
 
 def is_folder_mime(mime_type: str) -> bool:

@@ -127,6 +127,8 @@ bun install          # never npm/yarn — bun.lock is the lockfile
 bun run typecheck    # tsc --noEmit, exit 0
 bun run lint         # oxlint, 0 warnings 0 errors
 bun run build        # next build, exit 0
+bun run test         # vitest, watch mode
+bun run test:run     # vitest run, exit 0 (CI / one-shot)
 bun run dev          # http://localhost:3000
 ```
 
@@ -318,7 +320,7 @@ A change is finished only when all of these pass:
 .venv/bin/python manage.py spectacular --validate
 
 # frontend
-cd webui && bun run typecheck && bun run lint && bun run build
+cd webui && bun run typecheck && bun run lint && bun run build && bun run test:run
 
 # language audit (must produce no output; i18n/ holds the sanctioned id.ts)
 grep -rniE 'wajib|belum|tidak|harus|untuk|dengan|yang' \

@@ -1,7 +1,11 @@
+import logging
+
 from rest_framework import serializers
 
 from . import drive
 from .models import Material
+
+logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 ALLOWED_EXTENSIONS = (
@@ -110,7 +114,20 @@ class MaterialSerializer(serializers.ModelSerializer):
             validated_data["drive_file_id"] = (
                 drive.parse_drive_url(source_url).file_id if source_url else ""
             )
-        return super().update(instance, validated_data)
+        new_file = validated_data.get("file")
+        old_file = instance.file
+        updated = super().update(instance, validated_data)
+        # Replace (not orphan) the previous object. Deleting after the save means
+        # a failed save cannot destroy the old upload, and a storage hiccup must
+        # not turn a successful PATCH into a 500.
+        if new_file and old_file and old_file.name != new_file.name:
+            try:
+                old_file.storage.delete(old_file.name)
+            except Exception:
+                logger.warning(
+                    "Could not delete replaced file %s; left as-is.", old_file.name
+                )
+        return updated
 
     def get_source_type(self, obj):
         return "file" if obj.file else "link"
@@ -133,18 +150,25 @@ class MaterialSerializer(serializers.ModelSerializer):
         return None
 
     def get_drive_name(self, obj):
-        fid = self._metadata_file_id(obj)
-        if not fid:
-            return None
-        meta = drive.fetch_metadata(fid)
+        meta = self._metadata(obj)
         return meta["name"] if meta else None
 
     def get_drive_mime_type(self, obj):
+        meta = self._metadata(obj)
+        return meta["mime_type"] if meta else None
+
+    def _metadata(self, obj):
+        """Resolve Drive metadata once per object; both drive_* fields read here.
+
+        Memoised on the instance for the duration of one `to_representation`, so
+        a list page pays at most one (cache-backed) lookup per row instead of two.
+        """
         fid = self._metadata_file_id(obj)
         if not fid:
             return None
-        meta = drive.fetch_metadata(fid)
-        return meta["mime_type"] if meta else None
+        if not hasattr(obj, "_drive_metadata"):
+            obj._drive_metadata = drive.fetch_metadata(fid)
+        return obj._drive_metadata
 
     @staticmethod
     def _file_drive_id(obj):

@@ -5,14 +5,23 @@ import { en, type Messages } from '@/i18n/en';
 export type FieldErrors = Record<string, string[]>;
 
 /**
+ * Which copy a 401 should render. `'auth'` (default) is the sign-in form's
+ * "incorrect credentials"; `'generic'` is for authenticated screens where a
+ * 401 means the session expired, not a bad password.
+ */
+export type ApiErrorContext = 'auth' | 'generic';
+
+/**
  * Normalises a caught API error into `{ fieldErrors, formError }`.
  * DRF field errors surface per input; anything else becomes a form-level
  * message. `messages` is the active locale's error catalog — callers pass it
- * so the user never sees a mixed-language form.
+ * so the user never sees a mixed-language form. `context` only changes the
+ * 401 copy; the default preserves the sign-in/sign-up behaviour exactly.
  */
 export function parseApiError(
   error: unknown,
-  messages: Messages['errors'] = en.errors
+  messages: Messages['errors'] = en.errors,
+  context: ApiErrorContext = 'auth'
 ): {
   fieldErrors: FieldErrors;
   formError: string | null;
@@ -36,7 +45,10 @@ export function parseApiError(
     }
 
     if (error.status === 401) {
-      return { fieldErrors: {}, formError: messages.incorrectCredentials };
+      return {
+        fieldErrors: {},
+        formError: context === 'generic' ? messages.sessionExpired : messages.incorrectCredentials
+      };
     }
 
     const detail =

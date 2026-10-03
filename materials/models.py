@@ -25,6 +25,17 @@ class Material(models.Model):
 
     class Meta:
         ordering = ("-created_at",)
+        constraints = (
+            models.CheckConstraint(
+                name="material_exactly_one_source",
+                # Exactly one of file / source_url present and non-empty; the
+                # `__isnull=True | =''` pair covers the admin's empty-string file.
+                condition=(
+                    (models.Q(file__isnull=True) | models.Q(file=""))
+                    ^ (models.Q(source_url__isnull=True) | models.Q(source_url=""))
+                ),
+            ),
+        )
 
     def __str__(self):
         return self.title

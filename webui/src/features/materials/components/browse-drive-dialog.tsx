@@ -54,7 +54,10 @@ export function BrowseDriveDialog({
   });
 
   const notConfigured =
-    error instanceof ApiRequestError && error.status === 503;
+    (error instanceof ApiRequestError && error.status === 503) ||
+    data?.configured === false;
+
+  const serverError = error instanceof ApiRequestError && error.status === 502;
 
   const results = data?.results ?? [];
 
@@ -116,6 +119,8 @@ export function BrowseDriveDialog({
             </div>
           ) : notConfigured ? (
             <p className='text-muted-foreground p-4 text-sm'>{t.materials.browse.unavailable}</p>
+          ) : serverError ? (
+            <p className='text-destructive p-4 text-sm'>{t.materials.browse.errorServer}</p>
           ) : error ? (
             <p className='text-destructive p-4 text-sm'>{t.materials.browse.error}</p>
           ) : results.length === 0 ? (
