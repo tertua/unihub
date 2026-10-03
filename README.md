@@ -25,21 +25,6 @@ plus `webui/`, App Shell Next.js yang mengonsumsi API tersebut.
 - TanStack Query, Zod, TanStack Form
 - Package manager: [Bun](https://bun.sh)
 
-## Versi
-
-Proyek memakai **SemVer** (`MAJOR.MINOR.PATCH`) dan **mulai dari `0.1.0`**.
-Selama di `0.x`: `MINOR` untuk fitur/milestone, `PATCH` untuk perbaikan.
-Versi rilis ditandai tag `vX.Y.Z` di `master`, dan angka di `webui/package.json`
-mengikuti versi rilis terakhir.
-
-**Versi hanya naik ketika Anda meminta rilis.** Agent menghitung angka
-berikutnya dari commit sejak tag terakhir (ada fitur → `MINOR`, hanya
-perbaikan → `PATCH`), lalu mengeksekusi urutan rilisnya. Di antara rilis versi
-diam — agent hanya boleh *menyarankan* rilis saat milestone selesai, tidak
-pernah menaikkan sendiri. **Bagian `MAJOR` tidak pernah diubah tanpa
-instruksi eksplisit Anda** — kenaikan ke `1.0.0` hanya saat Anda menyatakan
-produk sudah stabil. (Ketentuan lengkap untuk agent ada di `AGENTS.md` §10.)
-
 ## Instalasi (environment bersih)
 
 ```bash
