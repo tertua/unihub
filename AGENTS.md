@@ -272,6 +272,19 @@ present and future.
 - Commit message: `type(scope): lowercase description`, English, imperative
   mood, one line for the subject; reference the plan file in the body when a
   plan exists.
+- **Agent commit trailer:** every agent-made commit ends with the trailer
+  `Co-authored-by: <model> <noreply@opencode.ai>` as the last paragraph of
+  the message, where `<model>` is the model that actually produced the
+  change — read it from your own system context (e.g.
+  `mimo-v2.6-flash-free`, `claude-sonnet-4-5`); never guess, never use
+  another identity. Human commits omit the trailer. The email part stays
+  constant so agent work remains greppable across models:
+  `git log --grep noreply@opencode.ai`.
+- **Commit execution:** local commit+push runs through the `committer`
+  subagent (`.opencode/agents/committer.md`) when the operator mentions it.
+  Every other agent stages its work, shows `git diff --cached`, and waits —
+  the operator's mention of `committer` is the explicit instruction required
+  by §10's first rule.
 - Before committing: `git status`, `git diff`, and `git log --oneline -10`.
 - This repository has **one `.git`, at the repository root.** Do not
   `git init` inside `webui/` — its nested `.git` was removed deliberately.

@@ -46,7 +46,10 @@ media/
 *.sw?
 
 # Misc.
-.opencode/
+# opencode local state (node_modules, plugins, tools) stays out;
+# agent definitions are config and must be tracked
+.opencode/*
+!.opencode/agents/
 .mindmodel/
 thoughts/
 TODO.md
