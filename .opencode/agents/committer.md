@@ -1,6 +1,7 @@
 ---
 description: Executes commit + push for unihub on operator instruction — stages scoped changes, builds the conventional message with the agent trailer, pushes dev only.
 mode: subagent
+model: simata/sengkuni-2.0
 permission:
   edit: deny
   bash:
@@ -53,7 +54,9 @@ politely and stop: never commit "to be helpful".
 
 - Read AGENTS.md §10 first; its rules win over any conflicting habit.
 - One logical commit per instruction; no drive-by changes smuggled in.
-- The trailer rule applies here too: `<model>` comes from your system
-  context, the email stays `noreply@opencode.ai`.
+- The trailer rule applies here too: `<model>` = the model that actually
+  produced the staged changes — take it from your system context; if the
+  operator names a different model when invoking you, use the model they
+  name. Never guess. The email stays `noreply@opencode.ai`.
 - If anything is unclear (wrong branch, nothing staged, suspicious diff),
   stop and report — do not improvise.
