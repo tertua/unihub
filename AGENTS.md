@@ -61,6 +61,9 @@ Current state (MVP):
 | `tools`, `chat`, `spaces` apps | scaffold only (empty packages) |
 | `webui/` App Shell (Next.js) | complete, wired to real JWT API |
 | Material upload (Material Hub API) | **implemented** — `materials` app, `/api/v1/material/` |
+| Drive link materials | **implemented** — `source_url` + `drive_file_id` on `Material` |
+| Material file storage | **implemented** — Google Workspace Shared Drive via service-account storage (`materials/storage.py`); falls back to local disk when unconfigured |
+| Drive browse (file picker) | **implemented** — `materials` app, `GET /api/v1/drive/` (`drive_views.py`); `IsAuthenticated` read-only, 503 when unconfigured |
 | RAG chat, spaces | **future phases — do not build them now** |
 
 Architecture decisions are mandatory reading:
@@ -110,7 +113,7 @@ proxy.ts        # Next middleware guarding /dashboard/*
 
 ```bash
 .venv/bin/python manage.py runserver 127.0.0.1:8000   # dev server
-.venv/bin/python manage.py test                        # 17 tests, must stay green
+.venv/bin/python manage.py test                        # 96 tests, must stay green
 .venv/bin/python manage.py check                       # 0 issues
 .venv/bin/python manage.py makemigrations --check       # must report no changes
 .venv/bin/python manage.py spectacular --validate        # OpenAPI schema valid

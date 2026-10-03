@@ -1,21 +1,21 @@
-import PageContainer from '@/components/layout/page-container';
-import { NotImplemented } from '@/components/not-implemented';
+import { MaterialsPageClient } from '@/features/materials/components/materials-page-client';
 import { getMessages } from '@/i18n/get-locale';
 import { Metadata } from 'next';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getMessages();
   return {
-    title: 'Material Hub',
-    description: t.pages.materials.description
+    title: t.materials.title,
+    description: t.materials.description
   };
 }
 
 export default async function MaterialsPage() {
   const t = await getMessages();
   return (
-    <PageContainer pageTitle='Material Hub' pageDescription={t.pages.materials.description}>
-      <NotImplemented title='Material Hub' appName='materials' />
-    </PageContainer>
+    <MaterialsPageClient
+      pageTitle={t.materials.title}
+      pageDescription={t.materials.description}
+    />
   );
 }

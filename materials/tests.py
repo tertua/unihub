@@ -1,16 +1,29 @@
+import json
+import urllib.error
+from unittest import mock
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import SimpleTestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from . import drive
 from .models import Material
-from .serializers import MAX_UPLOAD_SIZE_BYTES
+from .serializers import MAX_UPLOAD_SIZE_BYTES, MaterialSerializer
 
 User = get_user_model()
 
 TOKEN_URL = "/api/v1/auth/token/"
 MATERIAL_LIST_URL = "/api/v1/material/"
+DRIVE_BROWSE_URL = "/api/v1/drive/"
 PAGE_SIZE = 20
+
+DRIVE_FILE_URL = "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view"
+DRIVE_FILE_ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz012345"
+DRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1FoLdErIdXyZ0123456789ab"
+DRIVE_FOLDER_ID = "1FoLdErIdXyZ0123456789ab"
+FOLDER_MIME = "application/vnd.google-apps.folder"
 
 
 def material_detail_url(pk):
@@ -315,3 +328,697 @@ class DetailUpdateDeleteTests(MaterialTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         material.refresh_from_db()
         self.assertEqual(material.owner, self.lecturer)
+
+
+class LinkMaterialTestCase(MaterialTestCase):
+    """Shared setup for link materials: creates a Drive-link row directly."""
+
+    def create_link_material(self, owner=None, title="Lecture recording",
+                             source_url=DRIVE_FILE_URL):
+        return Material.objects.create(
+            title=title,
+            course="CS101",
+            source_url=source_url,
+            drive_file_id=DRIVE_FILE_ID,
+            owner=owner or self.lecturer,
+        )
+
+
+class XorValidationTests(LinkMaterialTestCase):
+    """Exactly one of `file` / `source_url` must be present, create and update."""
+
+    def test_file_only_returns_201(self):
+        self.auth("lecturer")
+
+        response = self.client.post(
+            MATERIAL_LIST_URL,
+            {"title": "Slides", "file": pdf_upload()},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["source_type"], "file")
+
+    def test_link_only_returns_201(self):
+        self.auth("lecturer")
+
+        response = self.client.post(
+            MATERIAL_LIST_URL,
+            {"title": "Recording", "source_url": DRIVE_FILE_URL},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["source_type"], "link")
+        self.assertEqual(response.data["drive_file_id"], DRIVE_FILE_ID)
+        self.assertTrue(response.data["embed_url"].endswith("/preview"))
+
+    def test_neither_source_returns_400(self):
+        self.auth("lecturer")
+
+        response = self.client.post(
+            MATERIAL_LIST_URL,
+            {"title": "Nothing"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("source_url", response.data)
+
+    def test_both_sources_return_400(self):
+        self.auth("lecturer")
+
+        response = self.client.post(
+            MATERIAL_LIST_URL,
+            {"title": "Both", "file": pdf_upload(), "source_url": DRIVE_FILE_URL},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("source_url", response.data)
+
+    def test_patch_file_material_adding_link_returns_400(self):
+        material = self.create_material()
+        self.auth("lecturer")
+
+        response = self.client.patch(
+            material_detail_url(material.pk),
+            {"source_url": DRIVE_FILE_URL},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("source_url", response.data)
+
+    def test_patch_link_material_clearing_only_source_returns_400(self):
+        material = self.create_link_material()
+        self.auth("lecturer")
+
+        response = self.client.patch(
+            material_detail_url(material.pk),
+            {"source_url": ""},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        material.refresh_from_db()
+        self.assertEqual(material.source_url, DRIVE_FILE_URL)
+
+    def test_patch_link_material_to_different_link_updates_id(self):
+        material = self.create_link_material()
+        other_id = "1ZzYyXxWwVvUuTtSsRrQqPpOoNnMm"
+        other_url = f"https://drive.google.com/file/d/{other_id}/view"
+        self.auth("lecturer")
+
+        response = self.client.patch(
+            material_detail_url(material.pk),
+            {"source_url": other_url},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        material.refresh_from_db()
+        self.assertEqual(material.drive_file_id, other_id)
+
+
+class DriveHostValidationTests(LinkMaterialTestCase):
+    """The serializer is the gatekeeper: only Drive hosts with a real ID pass."""
+
+    def _post(self, url):
+        self.auth("lecturer")
+        return self.client.post(
+            MATERIAL_LIST_URL,
+            {"title": "Link", "source_url": url},
+            format="json",
+        )
+
+    def test_non_drive_host_returns_400(self):
+        response = self._post(
+            "https://example.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_substring_host_trap_returns_400(self):
+        response = self._post(
+            "https://evil.example.com/drive.google.com/file/d/"
+            "1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_missing_id_returns_400(self):
+        response = self._post("https://drive.google.com/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_too_short_id_returns_400(self):
+        response = self._post("https://drive.google.com/open?id=abc")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_valid_drive_link_returns_201(self):
+        response = self._post(DRIVE_FILE_URL)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+
+class DriveIdExtractionTests(LinkMaterialTestCase):
+    """IDs are extracted from every supported path and normalized on save."""
+
+    def _post_and_fetch(self, url):
+        self.auth("lecturer")
+        response = self.client.post(
+            MATERIAL_LIST_URL,
+            {"title": "Link", "source_url": url},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        return Material.objects.get(pk=response.data["id"])
+
+    def test_file_path_canonicalized(self):
+        material = self._post_and_fetch(DRIVE_FILE_URL)
+        self.assertEqual(material.source_url, DRIVE_FILE_URL)
+        self.assertEqual(material.drive_file_id, DRIVE_FILE_ID)
+
+    def test_open_query_canonicalized_to_file_view(self):
+        material = self._post_and_fetch(
+            f"https://drive.google.com/open?id={DRIVE_FILE_ID}"
+        )
+        self.assertEqual(material.source_url, DRIVE_FILE_URL)
+        self.assertEqual(material.drive_file_id, DRIVE_FILE_ID)
+
+    def test_folder_path_canonicalized(self):
+        material = self._post_and_fetch(DRIVE_FOLDER_URL)
+        self.assertEqual(material.source_url, DRIVE_FOLDER_URL)
+        self.assertEqual(material.drive_file_id, DRIVE_FOLDER_ID)
+
+    def test_docs_document_canonicalized_to_file_view(self):
+        material = self._post_and_fetch(
+            f"https://docs.google.com/document/d/{DRIVE_FILE_ID}/edit"
+        )
+        self.assertEqual(material.source_url, DRIVE_FILE_URL)
+
+    def test_docs_spreadsheet_canonicalized_to_file_view(self):
+        material = self._post_and_fetch(
+            f"https://docs.google.com/spreadsheets/d/{DRIVE_FILE_ID}/edit"
+        )
+        self.assertEqual(material.source_url, DRIVE_FILE_URL)
+
+    def test_http_host_is_accepted(self):
+        material = self._post_and_fetch(
+            f"http://drive.google.com/file/d/{DRIVE_FILE_ID}/view"
+        )
+        self.assertEqual(material.drive_file_id, DRIVE_FILE_ID)
+
+    def test_folder_link_has_no_embed(self):
+        self.auth("lecturer")
+        response = self.client.post(
+            MATERIAL_LIST_URL,
+            {"title": "Folder", "source_url": DRIVE_FOLDER_URL},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["source_type"], "link")
+        self.assertIsNone(response.data["embed_url"])
+
+
+class SerializerOutputTests(LinkMaterialTestCase):
+    """The response exposes the exact fields the frontend consumes."""
+
+    def test_file_material_output(self):
+        material = self.create_material()
+        self.auth("student")
+
+        response = self.client.get(material_detail_url(material.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["source_type"], "file")
+        self.assertIsNone(response.data["source_url"])
+        self.assertIsNone(response.data["embed_url"])
+        self.assertEqual(response.data["drive_file_id"], "")
+
+    def test_link_material_output_without_api_key(self):
+        material = self.create_link_material()
+        self.auth("student")
+
+        response = self.client.get(material_detail_url(material.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["source_type"], "link")
+        self.assertTrue(response.data["embed_url"])
+        self.assertIsNone(response.data["drive_name"])
+        self.assertIsNone(response.data["drive_mime_type"])
+
+
+class PermissionsUnchangedTests(LinkMaterialTestCase):
+    """Link materials keep the same permission model as file materials."""
+
+    def test_student_link_create_returns_403(self):
+        self.auth("student")
+
+        response = self.client.post(
+            MATERIAL_LIST_URL,
+            {"title": "Recording", "source_url": DRIVE_FILE_URL},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_anonymous_link_create_returns_401(self):
+        response = self.client.post(
+            MATERIAL_LIST_URL,
+            {"title": "Recording", "source_url": DRIVE_FILE_URL},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_student_can_list_and_read_link_material(self):
+        material = self.create_link_material()
+        self.auth("student")
+
+        listing = self.client.get(MATERIAL_LIST_URL)
+        detail = self.client.get(material_detail_url(material.pk))
+
+        self.assertEqual(listing.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+
+    def test_student_patch_and_delete_link_material_return_403(self):
+        material = self.create_link_material()
+        self.auth("student")
+
+        patch = self.client.patch(
+            material_detail_url(material.pk),
+            {"description": "changed"},
+            format="json",
+        )
+        delete = self.client.delete(material_detail_url(material.pk))
+
+        self.assertEqual(patch.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(delete.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class DriveModuleTests(SimpleTestCase):
+    """Pure unit tests for the credential-optional Drive module (no DB, no net)."""
+
+    def test_parse_returns_none_for_empty_and_bare_id(self):
+        self.assertIsNone(drive.parse_drive_url(""))
+        self.assertIsNone(drive.parse_drive_url(DRIVE_FILE_ID))
+
+    def test_parse_returns_none_for_non_drive_host(self):
+        self.assertIsNone(
+            drive.parse_drive_url(f"https://example.com/file/d/{DRIVE_FILE_ID}/view")
+        )
+
+    def test_canonical_embed_download_for_file(self):
+        ref = drive.parse_drive_url(DRIVE_FILE_URL)
+        self.assertEqual(drive.canonical_url(ref), DRIVE_FILE_URL)
+        self.assertEqual(
+            drive.embed_url(ref),
+            f"https://drive.google.com/file/d/{DRIVE_FILE_ID}/preview",
+        )
+        self.assertEqual(
+            drive.download_url(ref),
+            f"https://drive.google.com/uc?export=download&id={DRIVE_FILE_ID}",
+        )
+
+    def test_canonical_embed_download_for_folder(self):
+        ref = drive.parse_drive_url(DRIVE_FOLDER_URL)
+        self.assertEqual(drive.canonical_url(ref), DRIVE_FOLDER_URL)
+        self.assertIsNone(drive.embed_url(ref))
+        self.assertIsNone(drive.download_url(ref))
+
+    def test_is_drive_file_id_uses_shared_charset(self):
+        self.assertTrue(drive.is_drive_file_id(DRIVE_FILE_ID))
+        self.assertFalse(drive.is_drive_file_id("materials/2026/01/legacy.pdf"))
+        self.assertFalse(drive.is_drive_file_id(""))
+
+    @override_settings(GOOGLE_DRIVE_API_KEY="")
+    def test_fetch_metadata_without_key_makes_no_call(self):
+        with mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            result = drive.fetch_metadata(DRIVE_FILE_ID)
+
+        self.assertIsNone(result)
+        urlopen.assert_not_called()
+
+
+def _fake_response(payload, headers=None):
+    """A minimal context-manager HTTP response for patched urlopen."""
+    body = json.dumps(payload).encode("utf-8")
+    response = mock.MagicMock()
+    response.read.return_value = body
+    response.headers = headers or {}
+    response.__enter__ = lambda self: self
+    response.__exit__ = lambda self, *args: False
+    return response
+
+
+class TokenMintingTests(SimpleTestCase):
+    """Service-account token minting — urlopen always patched, never real."""
+
+    def setUp(self):
+        super().setUp()
+        drive._token_cache.clear()
+
+    def tearDown(self):
+        drive._token_cache.clear()
+        super().tearDown()
+
+    @override_settings(GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="ZmFrZQ==")
+    def test_happy_path_returns_token_and_signs_rs256(self):
+        with mock.patch.object(
+            drive, "_service_account_info",
+            return_value={"client_email": "sa@example.com", "private_key": "KEY"},
+        ), mock.patch("materials.drive.jwt.encode", return_value="assertion") as encode, \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _fake_response(
+                {"access_token": "tok", "expires_in": 3600}
+            )
+            token = drive.get_access_token()
+
+        self.assertEqual(token, "tok")
+        self.assertEqual(encode.call_args.kwargs["algorithm"], "RS256")
+        self.assertEqual(urlopen.call_count, 1)
+
+    @override_settings(GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="ZmFrZQ==")
+    def test_cache_reuse_avoids_second_call(self):
+        with mock.patch.object(
+            drive, "_service_account_info",
+            return_value={"client_email": "sa@example.com", "private_key": "KEY"},
+        ), mock.patch("materials.drive.jwt.encode", return_value="assertion"), \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _fake_response(
+                {"access_token": "tok", "expires_in": 3600}
+            )
+            first = drive.get_access_token()
+            second = drive.get_access_token()
+
+        self.assertEqual(first, second)
+        self.assertEqual(urlopen.call_count, 1)
+
+    @override_settings(GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="ZmFrZQ==")
+    def test_http_error_propagates_and_caches_nothing(self):
+        with mock.patch.object(
+            drive, "_service_account_info",
+            return_value={"client_email": "sa@example.com", "private_key": "KEY"},
+        ), mock.patch("materials.drive.jwt.encode", return_value="assertion"), \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = urllib.error.HTTPError(
+                "https://oauth2.googleapis.com/token", 400, "bad", {}, None
+            )
+            with self.assertRaises(urllib.error.HTTPError):
+                drive.get_access_token()
+
+        self.assertNotIn("access_token", drive._token_cache)
+
+    @override_settings(GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="")
+    def test_unconfigured_makes_no_call(self):
+        with mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            info = drive._service_account_info()
+
+        self.assertEqual(info, {})
+        urlopen.assert_not_called()
+
+
+class ResumableUploadTests(SimpleTestCase):
+    """Resumable upload flow — urlopen patched, session URL + PUT asserted."""
+
+    def setUp(self):
+        super().setUp()
+        drive._token_cache.clear()
+
+    def tearDown(self):
+        drive._token_cache.clear()
+        super().tearDown()
+
+    def test_happy_path_returns_id_and_puts_to_session_url(self):
+        session_url = "https://upload.example/session"
+        with mock.patch("materials.drive.get_access_token", return_value="tok"), \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = [
+                _fake_response({}, headers={"Location": session_url}),
+                _fake_response({"id": "newDriveId0123456789"}),
+            ]
+            file_id = drive.upload_file(
+                filename="notes.pdf", data=b"bytes", folder_id="folder1234567890"
+            )
+
+        self.assertEqual(file_id, "newDriveId0123456789")
+        init_req = urlopen.call_args_list[0].args[0]
+        put_req = urlopen.call_args_list[1].args[0]
+        self.assertIn("supportsAllDrives=true", init_req.full_url)
+        self.assertEqual(put_req.get_method(), "PUT")
+        self.assertEqual(put_req.full_url, session_url)
+
+    def test_http_error_propagates(self):
+        with mock.patch("materials.drive.get_access_token", return_value="tok"), \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = urllib.error.HTTPError(
+                "https://example", 500, "boom", {}, None
+            )
+            with self.assertRaises(urllib.error.HTTPError):
+                drive.upload_file(
+                    filename="notes.pdf", data=b"bytes", folder_id="folder1234567890"
+                )
+
+
+class StorageSelectionTests(SimpleTestCase):
+    """STORAGES resolves to Drive only when creds + a target are both present."""
+
+    def test_unconfigured_uses_filesystem_storage(self):
+        with override_settings(
+            GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="",
+            GOOGLE_DRIVE_FOLDER_ID="",
+            GOOGLE_DRIVE_SHARED_DRIVE_ID="",
+        ):
+            from django.core.files.storage import storages
+
+            self.assertEqual(
+                storages["default"].__class__.__name__, "FileSystemStorage"
+            )
+
+    def test_configured_with_creds_and_folder_uses_drive_storage(self):
+        # Mirror the settings-time selection expression on the four vars.
+        with override_settings(
+            STORAGES={
+                "default": {"BACKEND": "materials.storage.GoogleDriveStorage"},
+                "staticfiles": {
+                    "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+                },
+            }
+        ):
+            from django.core.files.storage import storages
+
+            self.assertEqual(
+                storages["default"].__class__.__name__, "GoogleDriveStorage"
+            )
+
+
+class DriveStorageBackendTests(SimpleTestCase):
+    """The backend's name-based branching keeps legacy rows working, no network."""
+
+    def setUp(self):
+        from materials.storage import GoogleDriveStorage
+
+        self.storage = GoogleDriveStorage()
+
+    def test_url_for_drive_id_is_canonical_view(self):
+        self.assertEqual(
+            self.storage.url(DRIVE_FILE_ID),
+            f"https://drive.google.com/file/d/{DRIVE_FILE_ID}/view",
+        )
+
+    def test_url_for_legacy_local_name_is_media_url(self):
+        from django.conf import settings
+
+        self.assertTrue(
+            self.storage.url("materials/2026/01/legacy.pdf").startswith(
+                settings.MEDIA_URL
+            )
+        )
+
+    def test_exists_is_false(self):
+        self.assertFalse(self.storage.exists(DRIVE_FILE_ID))
+
+    def test_open_and_size_raise(self):
+        with self.assertRaises(NotImplementedError):
+            self.storage.open(DRIVE_FILE_ID)
+        with self.assertRaises(NotImplementedError):
+            self.storage.size(DRIVE_FILE_ID)
+
+
+class FileMaterialEmbedUrlTests(LinkMaterialTestCase):
+    """File materials on Drive storage expose a preview embed (P14)."""
+
+    def test_file_material_with_drive_id_name_has_embed(self):
+        material = Material.objects.create(
+            title="Stored on Drive",
+            course="CS101",
+            file=DRIVE_FILE_ID,
+            owner=self.lecturer,
+        )
+        self.auth("student")
+
+        response = self.client.get(material_detail_url(material.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["source_type"], "file")
+        self.assertTrue(response.data["embed_url"].endswith("/preview"))
+
+    def test_file_material_with_legacy_name_has_no_embed(self):
+        material = self.create_material()
+        self.auth("student")
+
+        response = self.client.get(material_detail_url(material.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["embed_url"])
+
+
+class DriveBrowseEndpointTests(LinkMaterialTestCase):
+    """GET /api/v1/drive/ — 401 anonymous, 503 unconfigured, 200/502 when set."""
+
+    def test_anonymous_returns_401(self):
+        response = self.client.get(DRIVE_BROWSE_URL)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    @override_settings(GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="")
+    def test_unconfigured_returns_503_with_zero_outbound_calls(self):
+        self.auth("student")
+        with mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            response = self.client.get(DRIVE_BROWSE_URL)
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(
+            response.data["detail"], "Drive integration is not configured."
+        )
+        urlopen.assert_not_called()
+
+    @override_settings(
+        GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="ZmFrZQ==",
+        GOOGLE_DRIVE_FOLDER_ID="rootFolder012345678",
+        GOOGLE_DRIVE_SHARED_DRIVE_ID="",
+    )
+    def test_configured_returns_folder_and_file_entries(self):
+        self.auth("student")
+        page = {
+            "files": [
+                {"id": "folderXyz0123456789", "name": "Notes", "mimeType": FOLDER_MIME},
+                {"id": DRIVE_FILE_ID, "name": "week1.pdf", "mimeType": "application/pdf"},
+            ]
+        }
+        with mock.patch("materials.drive.get_access_token", return_value="tok"), \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _fake_response(page)
+            response = self.client.get(DRIVE_BROWSE_URL)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["configured"])
+        self.assertEqual(len(response.data["results"]), 2)
+        folder, file_entry = response.data["results"]
+        self.assertTrue(folder["isFolder"])
+        self.assertIn("/drive/folders/", folder["url"])
+        self.assertFalse(file_entry["isFolder"])
+        self.assertTrue(file_entry["url"].endswith("/view"))
+        self.assertFalse(response.data["truncated"])
+
+    @override_settings(
+        GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="ZmFrZQ==",
+        GOOGLE_DRIVE_FOLDER_ID="rootFolder012345678",
+        GOOGLE_DRIVE_SHARED_DRIVE_ID="",
+    )
+    def test_parent_param_is_used_in_query(self):
+        self.auth("student")
+        parent_id = "subFolder0123456789"
+        with mock.patch("materials.drive.get_access_token", return_value="tok"), \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _fake_response({"files": []})
+            response = self.client.get(DRIVE_BROWSE_URL, {"parent": parent_id})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        sent_url = urlopen.call_args.args[0].full_url
+        self.assertIn(f"'{parent_id}'", urllib.parse.unquote(sent_url))
+        self.assertEqual(response.data["parent"], parent_id)
+
+    @override_settings(
+        GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="ZmFrZQ==",
+        GOOGLE_DRIVE_FOLDER_ID="rootFolder012345678",
+        GOOGLE_DRIVE_SHARED_DRIVE_ID="",
+    )
+    def test_next_page_token_sets_truncated(self):
+        self.auth("student")
+        with mock.patch("materials.drive.get_access_token", return_value="tok"), \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _fake_response(
+                {"files": [], "nextPageToken": "tok2"}
+            )
+            response = self.client.get(DRIVE_BROWSE_URL)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["truncated"])
+
+    @override_settings(
+        GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="ZmFrZQ==",
+        GOOGLE_DRIVE_FOLDER_ID="rootFolder012345678",
+        GOOGLE_DRIVE_SHARED_DRIVE_ID="",
+    )
+    def test_drive_error_returns_502(self):
+        self.auth("student")
+        with mock.patch("materials.drive.get_access_token", return_value="tok"), \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = urllib.error.HTTPError(
+                "https://www.googleapis.com", 500, "boom", {}, None
+            )
+            response = self.client.get(DRIVE_BROWSE_URL)
+
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertEqual(response.data["detail"], "Drive API error.")
+
+
+class DriveBrowseServiceTests(SimpleTestCase):
+    """Pure unit tests for the browse service helpers (no real network)."""
+
+    def test_is_folder_mime(self):
+        self.assertTrue(drive.is_folder_mime(FOLDER_MIME))
+        self.assertFalse(drive.is_folder_mime("application/pdf"))
+
+    @override_settings(GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="")
+    def test_is_configured_false_with_no_creds(self):
+        with mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            self.assertFalse(drive.is_configured())
+        urlopen.assert_not_called()
+
+    @override_settings(GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="ZmFrZQ==")
+    def test_is_configured_true_with_creds(self):
+        self.assertTrue(drive.is_configured())
+
+    @override_settings(
+        GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="ZmFrZQ==",
+        GOOGLE_DRIVE_FOLDER_ID="rootFolder012345678",
+        GOOGLE_DRIVE_SHARED_DRIVE_ID="",
+    )
+    def test_list_children_targets_configured_folder(self):
+        with mock.patch("materials.drive.get_access_token", return_value="tok"), \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _fake_response({"files": []})
+            parent, results, truncated = drive.list_children("")
+
+        sent = urllib.parse.unquote_plus(urlopen.call_args.args[0].full_url)
+        self.assertIn("'rootFolder012345678' in parents", sent)
+        self.assertNotIn("corpora=drive", sent)
+        self.assertEqual(parent, "rootFolder012345678")
+        self.assertEqual(results, [])
+        self.assertFalse(truncated)
+
+    @override_settings(
+        GOOGLE_DRIVE_SERVICE_ACCOUNT_B64="ZmFrZQ==",
+        GOOGLE_DRIVE_FOLDER_ID="",
+        GOOGLE_DRIVE_SHARED_DRIVE_ID="sharedDrive0123456789",
+    )
+    def test_list_children_shared_drive_params_without_folder(self):
+        with mock.patch("materials.drive.get_access_token", return_value="tok"), \
+             mock.patch("materials.drive.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _fake_response({"files": []})
+            parent, results, truncated = drive.list_children("")
+
+        sent = urllib.parse.unquote(urlopen.call_args.args[0].full_url)
+        self.assertIn("driveId=sharedDrive0123456789", sent)
+        self.assertIn("corpora=drive", sent)
+        self.assertNotIn("in parents", sent)
+        self.assertIsNone(parent)

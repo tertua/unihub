@@ -98,6 +98,16 @@ DATABASES = {
 }
 
 
+# Google Drive integration — both optional; absence must never break the API.
+GOOGLE_DRIVE_API_KEY = env("GOOGLE_DRIVE_API_KEY", default="")
+GOOGLE_DRIVE_SERVICE_ACCOUNT_B64 = env("GOOGLE_DRIVE_SERVICE_ACCOUNT_B64", default="")
+# Google Drive storage — service-account JSON (base64) + Shared Drive target.
+# When the service account AND a folder/shared-drive id are present, uploads go
+# to Google Drive; otherwise they stay on local disk (dev/test = zero network).
+GOOGLE_DRIVE_SHARED_DRIVE_ID = env("GOOGLE_DRIVE_SHARED_DRIVE_ID", default="")
+GOOGLE_DRIVE_FOLDER_ID = env("GOOGLE_DRIVE_FOLDER_ID", default="")
+
+
 # Custom user model — must be declared before the first migration.
 AUTH_USER_MODEL = "accounts.User"
 
@@ -139,10 +149,29 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 
-# Media files (uploaded materials). Local disk in dev; remote storage is out of
-# scope for the MVP (see docs/adr/ and the Material Hub design).
+# Media files (uploaded materials). Local disk only as the zero-network
+# fallback; when Drive credentials + a target are set, uploads go to the Shared
+# Drive (docs/adr/003-google-shared-drive-storage.md).
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Storage selection is credential-gated: unconfigured -> local disk (dev/test
+# stay zero-network), configured -> the Drive backend writes to the Shared Drive.
+_DRIVE_CREDS = GOOGLE_DRIVE_SERVICE_ACCOUNT_B64
+_DRIVE_TARGET = GOOGLE_DRIVE_FOLDER_ID or GOOGLE_DRIVE_SHARED_DRIVE_ID
+
+STORAGES = {
+    "default": {
+        "BACKEND": (
+            "materials.storage.GoogleDriveStorage"
+            if (_DRIVE_CREDS and _DRIVE_TARGET)
+            else "django.core.files.storage.FileSystemStorage"
+        ),
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -170,3 +199,11 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "Faculty Learning Hub API",
     "VERSION": "1.0.0",
 }
+
+
+# Test runs swap in the fast MD5 hasher: the default PBKDF2 costs ~2s per hash
+# on dev hardware and dominated the suite (setUp creates three users per test).
+# The hashing algorithm itself is not under test; production hashing is
+# unchanged because this branch only fires for `manage.py test`.
+if "test" in sys.argv:
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]

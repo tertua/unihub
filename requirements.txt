@@ -5,3 +5,5 @@ django-cors-headers
 drf-spectacular
 django-environ
 psycopg[binary]        # driver PostgreSQL — dipakai sejak fase scaffolding
+PyJWT                  # service-account RS256 token signing (Drive integration)
+cryptography>=42       # crypto backend required by PyJWT for RS256

@@ -83,9 +83,24 @@ lihat [ADR-001](docs/adr/001-database-strategy.md).
 | `SECRET_KEY` | *(wajib diisi)* | Django secret key |
 | `DEBUG` | `False` | `True` hanya untuk local dev |
 | `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Dipisah koma |
+| `GOOGLE_DRIVE_API_KEY` | *(opsional)* | Kunci API untuk pengayaan metadata berkas Drive |
+| `GOOGLE_DRIVE_SERVICE_ACCOUNT_B64` | *(opsional)* | Service account (JSON base64) untuk unggah & telusur Shared Drive |
+| `GOOGLE_DRIVE_SHARED_DRIVE_ID` | *(opsional)* | ID Shared Drive tujuan (untuk panggilan API sadar Shared Drive) |
+| `GOOGLE_DRIVE_FOLDER_ID` | *(opsional)* | ID folder tujuan unggahan di dalam Shared Drive |
 
 Database test dibuat otomatis sebagai `test_<DB_NAME>` (user compose adalah
 superuser, jadi punya izin `CREATEDB`).
+
+### Penyimpanan
+
+Ketika `GOOGLE_DRIVE_SERVICE_ACCOUNT_B64` **dan** (`GOOGLE_DRIVE_FOLDER_ID`
+atau `GOOGLE_DRIVE_SHARED_DRIVE_ID`) diisi, berkas material baru disimpan di
+**Google Shared Drive** milik operator — bukan di disk lokal. Tanpa keduanya,
+unggahan jatuh kembali ke disk lokal (dev/test tetap nol-jaringan). Lihat
+[ADR-003](docs/adr/003-google-shared-drive-storage.md).
+
+Ketika integrasi Drive belum dikonfigurasi, endpoint telusur membalas `503`
+(bukan daftar palsu).
 
 Contoh memakai database di luar docker:
 
@@ -107,6 +122,7 @@ Prefix: `/api/v1/` — konsumsi publik frontend & integrasi, lihat
 | `POST` | `/api/v1/auth/token/refresh/` | Public | Refresh → `{access}` |
 | `GET` | `/api/v1/auth/me/` | JWT | Profil user sedang login |
 | `PATCH` | `/api/v1/auth/me/` | JWT | Update profil (identity field read-only) |
+| `GET` | `/api/v1/drive/` | JWT | Telusuri isi folder Shared Drive untuk memilih berkas sebagai material |
 
 Contoh:
 

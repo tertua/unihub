@@ -5,7 +5,11 @@ from .models import Material
 
 @admin.register(Material)
 class MaterialAdmin(admin.ModelAdmin):
-    list_display = ("title", "course", "owner", "created_at")
+    list_display = ("title", "course", "source_kind", "owner", "created_at")
     list_filter = ("course", "created_at")
-    search_fields = ("title", "description", "course")
+    search_fields = ("title", "description", "course", "source_url")
     raw_id_fields = ("owner",)
+
+    @admin.display(description="Source")
+    def source_kind(self, obj):
+        return "file" if obj.file else "drive link"

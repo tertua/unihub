@@ -126,6 +126,54 @@ export const en = {
     }
   },
 
+  materials: {
+    title: 'Material Hub',
+    description: 'Centralized course materials.',
+    loading: 'Loading materials…',
+    emptyTitle: 'No materials yet',
+    emptyDescription:
+      'Lecturers can add a Google Drive link to share course material.',
+    add: 'Add material',
+    cancel: 'Cancel',
+    openInDrive: 'Open in Drive',
+    openFile: 'Open file',
+    delete: 'Delete',
+    deleteTitle: 'Delete material?',
+    deleteDescription: 'This material will be removed. This action cannot be undone.',
+    courseLabel: 'Course',
+    form: {
+      title: 'Add material',
+      description: 'Share course material from a Google Drive link.',
+      titleLabel: 'Title',
+      titleRequired: 'Title is required.',
+      courseLabel: 'Course',
+      descriptionLabel: 'Description',
+      urlLabel: 'Google Drive link',
+      urlRequired: 'A Drive link is required.',
+      urlInvalid: 'Enter a valid Google Drive link (drive.google.com or docs.google.com).',
+      submit: 'Add material',
+      created: 'Material added.',
+      sourceNote: 'Link mode only. File upload is not available in this view.',
+      browse: 'Browse Drive'
+    },
+    sourceType: {
+      file: 'File',
+      link: 'Drive link'
+    },
+    browse: {
+      title: 'Browse Drive',
+      description: 'Pick a file from your Shared Drive.',
+      back: 'Back',
+      root: 'Shared Drive',
+      select: 'Select',
+      loading: 'Loading…',
+      empty: 'This folder is empty.',
+      unavailable: 'Drive integration is not configured.',
+      truncated: 'Showing the first 100 items.',
+      error: 'Could not load this folder.'
+    }
+  },
+
   notFound: {
     title: "Something's missing",
     description: "Sorry, the page you are looking for doesn't exist or has been moved.",

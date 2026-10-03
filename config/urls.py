@@ -18,6 +18,7 @@ urlpatterns = [
     # API v1 — add every new app's urls here under /api/v1/.
     path("api/v1/auth/", include("accounts.urls")),
     path("api/v1/material/", include("materials.urls")),
+    path("api/v1/drive/", include("materials.drive_urls")),
 
     # OpenAPI schema + interactive docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

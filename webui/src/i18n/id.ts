@@ -125,6 +125,54 @@ export const id: Messages = {
     }
   },
 
+  materials: {
+    title: 'Material Hub',
+    description: 'Materi kuliah terpusat.',
+    loading: 'Memuat materi…',
+    emptyTitle: 'Belum ada materi',
+    emptyDescription:
+      'Dosen dapat menambahkan tautan Google Drive untuk membagikan materi kuliah.',
+    add: 'Tambah materi',
+    cancel: 'Batal',
+    openInDrive: 'Buka di Drive',
+    openFile: 'Buka berkas',
+    delete: 'Hapus',
+    deleteTitle: 'Hapus materi?',
+    deleteDescription: 'Materi ini akan dihapus. Tindakan ini tidak dapat dibatalkan.',
+    courseLabel: 'Mata Kuliah',
+    form: {
+      title: 'Tambah materi',
+      description: 'Bagikan materi kuliah dari tautan Google Drive.',
+      titleLabel: 'Judul',
+      titleRequired: 'Judul wajib diisi.',
+      courseLabel: 'Mata Kuliah',
+      descriptionLabel: 'Deskripsi',
+      urlLabel: 'Tautan Google Drive',
+      urlRequired: 'Tautan Drive wajib diisi.',
+      urlInvalid: 'Masukkan tautan Google Drive yang valid (drive.google.com atau docs.google.com).',
+      submit: 'Tambah materi',
+      created: 'Materi ditambahkan.',
+      sourceNote: 'Hanya mode tautan. Unggah berkas tidak tersedia di tampilan ini.',
+      browse: 'Telusuri Drive'
+    },
+    sourceType: {
+      file: 'Berkas',
+      link: 'Tautan Drive'
+    },
+    browse: {
+      title: 'Telusuri Drive',
+      description: 'Pilih berkas dari Shared Drive Anda.',
+      back: 'Kembali',
+      root: 'Shared Drive',
+      select: 'Pilih',
+      loading: 'Memuat…',
+      empty: 'Folder ini kosong.',
+      unavailable: 'Integrasi Drive belum dikonfigurasi.',
+      truncated: 'Menampilkan 100 item pertama.',
+      error: 'Tidak dapat memuat folder ini.'
+    }
+  },
+
   notFound: {
     title: 'Halaman tidak ada',
     description: 'Maaf, halaman yang Anda cari tidak ada atau sudah dipindah.',
