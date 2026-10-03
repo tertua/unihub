@@ -187,6 +187,12 @@ present and future.
 
 - **Zero mock data.** No faker, no `constants/` sample arrays, no hardcoded
   fake metrics, no placeholder people. Every value comes from `/api/v1/`.
+- **Unused components are not leftovers.** `components/ui/`, `components/forms/`,
+  `ui/table/`, the icon registry, and small helper hooks form the project's
+  design contract — like the API contract, they exist whether or not a page
+  consumes them yet. Never delete a component because nothing imports it
+  today: the owner picks the visuals, so re-designing it yourself will not
+  match. Removing any of it requires an explicit instruction.
 - If an endpoint does not exist yet, render an honest empty state via
   `components/not-implemented.tsx`. Never fake content to fill space.
 - All requests go through `lib/api-client.ts` (adds `Authorization: Bearer`,
@@ -230,6 +236,16 @@ present and future.
 
 ## 10. Git workflow
 
+- **Two branches — this model is fixed:**
+  - `master` = release only. **Never commit to it directly.** It advances
+    solely by fast-forward promotion from `dev` when the operator asks for a
+    release: `git switch master && git merge --ff-only dev`.
+  - `dev` = the working branch. Every agent commit, feature branch, and
+    Dependabot PR lands here; feature branches fork from `dev` and merge back
+    into `dev`.
+  - No merge commits, no force-push. Dependabot's `target-branch`
+    (`.github/dependabot.yml`) must stay `dev` so release PRs never arrive
+    on `master` by accident.
 - **Never commit or push without explicit instruction.** Stage, show the diff or
   `git status`, then wait.
 - Stage only what the task touched. Never `git add -f`; if a path is gitignored,

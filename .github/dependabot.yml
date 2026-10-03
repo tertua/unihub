@@ -1,8 +1,9 @@
 # Group routine bumps into one PR per ecosystem so review stays cheap.
 # Majors and security updates are never grouped — they go out individually.
 #
-# No target-branch is set: until a dedicated integration branch exists, PRs
-# land on the repository default branch.
+# target-branch: dev — the branch model (AGENTS.md section 10) keeps master
+# release-only, and it advances only by fast-forward promotion from dev, so
+# update PRs must never open against master.
 version: 2
 updates:
   - package-ecosystem: pip
@@ -11,6 +12,7 @@ updates:
       interval: weekly
       time: "11:00"
     open-pull-requests-limit: 5
+    target-branch: dev
     groups:
       pip-minor-patch:
         update-types: ["minor", "patch"]
@@ -21,6 +23,7 @@ updates:
       interval: weekly
       time: "11:00"
     open-pull-requests-limit: 5
+    target-branch: dev
     groups:
       bun-minor-patch:
         update-types: ["minor", "patch"]
