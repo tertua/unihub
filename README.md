@@ -199,9 +199,14 @@ Bukan ditulis dari nol — App Shell diawali dari template MIT:
   lokal baru tersedia setelah commit pertama repo ini.
 
 Seluruh kode template yang tidak dipakai (Clerk, Sentry, AI SDK, Kanban,
-Notifications, mock/contoh features, skrip `cleanup`, docs template, dan
-berkas `.agents/`/`.claude/`) sudah dihapus; yang tersisa tinggal App Shell
-yang memanggil API kita.
+Notifications, mock/contoh features, skrip `cleanup`, docs template, berkas
+`.agents/`/`.claude/`, dan berkas Docker template — `Dockerfile`,
+`Dockerfile.bun`, `.dockerignore` yang tidak direferensikan compose mana pun)
+sudah dihapus; yang tersisa tinggal App Shell yang memanggil API kita.
+Konfigurasi Docker untuk deploy akan dibuat terintegrasi di
+`docker-compose.yml` root pada fase deployment — bukan terpisah di dalam
+`webui/`. `output: 'standalone'` di `next.config` tetap aktif lewat
+`BUILD_STANDALONE` sebagai bekalnya.
 
 ## Struktur project
 
