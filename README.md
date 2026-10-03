@@ -253,3 +253,12 @@ export dulu:
 ```bash
 export PYTHONPYCACHEPREFIX="$PWD/.cache/python"
 ```
+
+## Lisensi
+
+Proyek ini berlisensi **GNU General Public License v3.0** — teks lengkap ada
+di [`LICENSE`](LICENSE), dengan notice `Copyright (C) 2026 tertua`.
+
+Catatan: `webui/` berawal dari template MIT (Kiranism); berkas `webui/LICENSE`
+tetap berlaku untuk kode template tersebut — lihat bagian
+*Asal-usul `webui/`*.
