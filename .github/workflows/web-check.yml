@@ -1,0 +1,36 @@
+# Frontend side of the Definition of Done (AGENTS.md section 4).
+#
+# bun only — the lockfile is webui/bun.lock, so the install must be frozen
+# and the runner must not drift from the version the repo is developed with.
+name: Web Check
+
+on:
+  push:
+    paths:
+      - "webui/**"
+      - ".github/workflows/web-check.yml"
+  pull_request:
+    paths:
+      - "webui/**"
+      - ".github/workflows/web-check.yml"
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: webui
+    env:
+      # Inlined at build time. lib/api-client.ts has a fallback, but CI should
+      # state the contract explicitly instead of relying on it.
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:8000/api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run build

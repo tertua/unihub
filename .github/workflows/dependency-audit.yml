@@ -1,0 +1,44 @@
+# Vulnerability scan for what is already pinned. Dependabot opens the bumps;
+# this catches advisories against unchanged manifests, so it also runs on a
+# schedule the same way a weekly vuln check would.
+name: Dependency Audit
+
+on:
+  push:
+    paths:
+      - "requirements.txt"
+      - "webui/bun.lock"
+      - ".github/workflows/dependency-audit.yml"
+  pull_request:
+    paths:
+      - "requirements.txt"
+      - "webui/bun.lock"
+      - ".github/workflows/dependency-audit.yml"
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # CI-only tool, never added to requirements.txt.
+      - name: Audit Python dependencies
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Audit frontend dependencies
+        working-directory: webui
+        run: |
+          bun install --frozen-lockfile
+          bun audit

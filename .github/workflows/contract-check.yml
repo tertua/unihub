@@ -1,0 +1,79 @@
+# Greps for repo contracts no compiler can enforce. Same idea as a dialect
+# check: cheap, exact, and every rule traces back to a line in AGENTS.md.
+name: Contract Check
+
+on:
+  push:
+    paths:
+      - "accounts/**"
+      - "config/**"
+      - "materials/**"
+      - "tools/**"
+      - "chat/**"
+      - "spaces/**"
+      - "webui/src/**"
+      - ".env"
+      - ".env.example"
+      - ".github/workflows/contract-check.yml"
+  pull_request:
+    paths:
+      - "accounts/**"
+      - "config/**"
+      - "materials/**"
+      - "tools/**"
+      - "chat/**"
+      - "spaces/**"
+      - "webui/src/**"
+      - ".env"
+      - ".env.example"
+      - ".github/workflows/contract-check.yml"
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pure Django ORM only (AGENTS.md section 6): raw SQL would break the
+      # planned move to PostgreSQL + pgvector and costs portability.
+      - name: Forbid raw SQL
+        run: |
+          hits=$(grep -rnE '\.raw\(|\.extra\(|RawSQL|cursor\.execute\(' \
+            --include='*.py' accounts config materials tools chat spaces || true)
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            echo "Pure Django ORM only — see AGENTS.md section 6."
+            exit 1
+          fi
+
+      # English only in code (AGENTS.md section 1). webui/src/i18n/ is the
+      # one sanctioned place for Indonesian UI copy, hence the exclusion.
+      - name: Forbid Indonesian outside i18n/
+        run: |
+          if grep -rniE 'wajib|belum|tidak|harus|untuk|dengan|yang' \
+            --include='*.py' --include='*.ts' --include='*.tsx' \
+            --exclude-dir=i18n accounts config webui/src; then
+            echo "Indonesian text outside webui/src/i18n/ violates AGENTS.md section 1."
+            exit 1
+          fi
+
+      # Zero mock data and no template leftovers (AGENTS.md sections 7-8).
+      - name: Forbid mock data and template leftovers
+        run: |
+          if grep -rniE 'faker|mockData|clerk|sentry' accounts config webui/src; then
+            echo "Mock data or removed template code found — AGENTS.md sections 7-8."
+            exit 1
+          fi
+
+      # .env and webui/.env.local stay gitignored on purpose (AGENTS.md
+      # section 9). git ls-files only reports tracked files, so this trips
+      # exactly when someone force-adds one.
+      - name: Forbid tracking local env files
+        run: |
+          tracked=$(git ls-files -- .env webui/.env.local)
+          if [ -n "$tracked" ]; then
+            echo "$tracked"
+            echo "Local env files must never be tracked — AGENTS.md section 9."
+            exit 1
+          fi
