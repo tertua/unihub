@@ -30,6 +30,9 @@ Read this file before touching code.
    in the chat window is written in Bahasa Indonesia. Everything that persists
    — code, comments, commit messages, docs, plan files, subagent prompts —
    stays English per rules 1–4.
+7. **`README.md` and other human-facing docs are written in natural
+   Indonesian; `AGENTS.md` and every agent-facing doc are English-only.** The
+   operator reads the README; agents read this file.
 
 Verify at any time:
 
@@ -246,6 +249,22 @@ present and future.
   - No merge commits, no force-push. Dependabot's `target-branch`
     (`.github/dependabot.yml`) must stay `dev` so release PRs never arrive
     on `master` by accident.
+- **Versioning — SemVer, starts at `0.1.0`:**
+  - The release version lives as an annotated tag `vX.Y.Z` on `master`;
+    `webui/package.json` `"version"` must equal the released version.
+  - While on `0.x`: `MINOR` carries features and milestones, `PATCH` carries
+    fixes. Versions change **only when the operator asks for a release** —
+    never inside feature commits, never after Dependabot merges, never
+    proactively. The agent may *propose* a release once a milestone is done
+    and the DoD is green, but never bumps alone.
+  - **The agent computes the next number** from the commits since the last
+    tag: any `feat` -> `MINOR` +1, otherwise `PATCH` +1. A breaking change
+    means a `MAJOR` proposal: stop and wait for the operator's explicit yes.
+  - Release sequence: bump `webui/package.json` on `dev` -> commit
+    `chore(release): bump to vX.Y.Z` -> push -> ff-promote `master` ->
+    annotated tag `vX.Y.Z` on `master` -> push the tag.
+  - **Never bump `MAJOR` without an explicit operator instruction.**
+    `1.0.0` is declared only when the operator states the product is stable.
 - **Never commit or push without explicit instruction.** Stage, show the diff or
   `git status`, then wait.
 - Stage only what the task touched. Never `git add -f`; if a path is gitignored,
