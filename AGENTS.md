@@ -113,7 +113,7 @@ proxy.ts        # Next middleware guarding /dashboard/*
 
 ```bash
 .venv/bin/python manage.py runserver 127.0.0.1:8000   # dev server
-.venv/bin/python manage.py test                        # 96 tests, must stay green
+.venv/bin/python manage.py test                        # full suite, must stay green
 .venv/bin/python manage.py check                       # 0 issues
 .venv/bin/python manage.py makemigrations --check       # must report no changes
 .venv/bin/python manage.py spectacular --validate        # OpenAPI schema valid

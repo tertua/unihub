@@ -14,7 +14,7 @@ Drive file ID.
 ## Context
 
 The operator owns a paid Google Workspace Shared Drive and no longer provisions
-local disk for new uploads ("repot menyediakan source untuk penyimpanan"). All
+local disk for new uploads ("a hassle to provision storage sources"). All
 new material uploads therefore target the Shared Drive instead of local disk.
 
 ## Browse access (rev.3)

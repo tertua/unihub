@@ -1,9 +1,11 @@
 # Faculty Learning Hub
 
 Backend Django untuk aplikasi pembelajaran fakultas: **Material Hub**, **Tool Kit**,
-**AI Chat** ( fase 2 ), dan **Space**. Repo ini adalah *MVP scaffolding* — struktur
-project, konfigurasi, app `accounts` (lengkap), dan kerangka API `/api/v1/` —
-plus `webui/`, App Shell Next.js yang mengonsumsi API tersebut.
+**AI Chat** ( fase 2 ), dan **Space**. Repo ini berisi app `accounts` (lengkap) dan
+Material Hub yang sudah terimplementasi — API materi, penyimpanan ke Google Shared
+Drive (atau disk lokal), dan telusur Drive — sedangkan `tools`, `chat`, dan
+`spaces` masih scaffold; plus `webui/`, App Shell Next.js yang mengonsumsi API
+`/api/v1/` tersebut.
 
 > Keputusan arsitektur penting ada di [`docs/adr/`](docs/adr/):
 > - [ADR-001 — Database Strategy (PostgreSQL sejak awal)](docs/adr/001-database-strategy.md)
@@ -107,6 +109,11 @@ Prefix: `/api/v1/` — konsumsi publik frontend & integrasi, lihat
 | `POST` | `/api/v1/auth/token/refresh/` | Public | Refresh → `{access}` |
 | `GET` | `/api/v1/auth/me/` | JWT | Profil user sedang login |
 | `PATCH` | `/api/v1/auth/me/` | JWT | Update profil (identity field read-only) |
+| `GET` | `/api/v1/material/` | JWT | Daftar & pencarian materi (semua user login, termasuk mahasiswa) |
+| `POST` | `/api/v1/material/` | JWT (dosen/admin) | Unggah materi baru |
+| `GET` | `/api/v1/material/<id>/` | JWT | Detail satu materi |
+| `PUT` / `PATCH` | `/api/v1/material/<id>/` | JWT (dosen/admin) | Ubah materi |
+| `DELETE` | `/api/v1/material/<id>/` | JWT (dosen/admin) | Hapus materi |
 | `GET` | `/api/v1/drive/` | JWT | Telusuri isi folder Shared Drive untuk memilih berkas sebagai material |
 
 Contoh:
@@ -135,14 +142,16 @@ permission default `IsAuthenticated`.
 .venv/bin/python manage.py test
 ```
 
-Menjalankan unit test endpoint auth (register, login, refresh, me termasuk
-sisi unauthorized). Test DB `test_faculty_hub` dibuat & dihancurkan otomatis
-di PostgreSQL.
+Menjalankan seluruh suite test — **113 test** yang mencakup app `accounts`
+(auth: register, login, refresh, me, termasuk sisi unauthorized) dan
+`materials` (API materi + telusur Drive). Test DB `test_<DB_NAME>` dibuat &
+dihancurkan otomatis di PostgreSQL.
 
 ## Web UI
 
 `webui/` adalah App Shell Next.js: login/register, proteksi route, profil,
-navigasi 4 komponen produk (Overview, Material Hub, Tool Kit, AI Chat, Space).
+navigasi yang terdiri dari landing **Overview** (halaman dashboard) plus 4
+komponen produk — Material Hub, Tool Kit, AI Chat, Space.
 Semua data diambil dari `/api/v1/` — **tidak ada mock data** di dalamnya;
 halaman yang endpoint-nya belum ada menampilkan *empty state* yang jujur.
 
@@ -230,7 +239,7 @@ Konfigurasi Docker untuk deploy akan dibuat terintegrasi di
 .
 ├── config/                 # settings, urls, wsgi/asgi
 ├── accounts/               # User custom (role, NIM, NIP, study_program) + auth API
-├── materials/              # scaffold — Material Hub (fase berikutnya)
+├── materials/              # Material Hub API (models, API, penyimpanan, telusur Drive)
 ├── tools/                  # scaffold — Tool Kit
 ├── chat/                   # scaffold — AI Chat (fase 2, RAG)
 ├── spaces/                 # scaffold — Space (membership & forum)

@@ -5,17 +5,18 @@
 
 ## Decision
 
-PostgreSQL dipakai sejak fase scaffolding karena pgvector (kebutuhan RAG fase 2)
-hanya tersedia di PostgreSQL. Tidak ada fallback SQLite — ini menghindari migrasi
-data dan perbedaan dialek SQL di kemudian hari.
+PostgreSQL is used from the scaffolding phase onward because pgvector (a phase-2
+RAG requirement) is only available on PostgreSQL. There is no SQLite fallback —
+this avoids data migrations and SQL dialect differences later on.
 
 ## Consequences
 
-- Engine `DATABASES["default"]["ENGINE"]` selalu
-  `django.db.backends.postgresql`, dibaca dari env vars
+- The engine in `DATABASES["default"]["ENGINE"]` is always
+  `django.db.backends.postgresql`, read from the env vars
   (`DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`).
-- Database lokal dijalankan lewat `docker-compose.yml`
-  (image `pgvector/pgvector:pg16`), sehingga ekstensi `vector` tersedia
-  tanpa mengganti image saat fase RAG dimulai.
-- Test Django membuat `test_<DB_NAME>` di server yang sama
-  (user compose adalah superuser, jadi otomatis punya izin `CREATEDB`).
+- The local database runs through `docker-compose.yml`
+  (image `pgvector/pgvector:pg16`), so the `vector` extension is available
+  without swapping the image when the RAG phase starts.
+- Django tests create `test_<DB_NAME>` on the same server
+  (the compose user is a superuser, so it automatically has the `CREATEDB`
+  privilege).
