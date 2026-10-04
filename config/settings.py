@@ -7,6 +7,7 @@ code runs locally, in CI and in production without edits.
 
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import environ
@@ -202,6 +203,16 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+
+# SimpleJWT — token lifetimes must match the cookie max-ages the webui writes
+# (ACCESS_MAX_AGE / REFRESH_MAX_AGE in webui/src/lib/api-client.ts: 15 minutes
+# for access, 7 days for refresh). These used to be the silent library defaults
+# (5 minutes / 1 day), which made the cookie claims lie about refresh validity.
+SIMPLEJWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
 
