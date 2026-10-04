@@ -1,5 +1,8 @@
 'use client';
 
+import { getNavGroups } from '@/config/nav-config';
+import type { Messages } from '@/i18n/en';
+import { useMessages } from '@/i18n/use-messages';
 import { usePathname } from 'next/navigation';
 import { useMemo } from 'react';
 
@@ -8,39 +11,40 @@ type BreadcrumbItem = {
   link: string;
 };
 
-// This allows to add custom title as well
-const routeMapping: Record<string, BreadcrumbItem[]> = {
-  '/dashboard': [{ title: 'Dashboard', link: '/dashboard' }],
-  '/dashboard/employee': [
-    { title: 'Dashboard', link: '/dashboard' },
-    { title: 'Employee', link: '/dashboard/employee' }
-  ],
-  '/dashboard/product': [
-    { title: 'Dashboard', link: '/dashboard' },
-    { title: 'Product', link: '/dashboard/product' }
-  ]
-  // Add more custom mappings as needed
+// Catalog titles for the two routes the nav config cannot label well here:
+// the dashboard root is not listed at all, and the overview page is labelled
+// "Dashboard" there, which would repeat the root crumb.
+const routeTitles: Record<string, (t: Messages) => string> = {
+  '/dashboard': (t) => t.nav.dashboard,
+  '/dashboard/overview': (t) => t.nav.overview
 };
 
-export function useBreadcrumbs() {
-  const pathname = usePathname();
+// Last resort for unknown deep links, so a crumb never renders empty.
+function humanize(segment: string): string {
+  return segment.charAt(0).toUpperCase() + segment.slice(1);
+}
 
-  const breadcrumbs = useMemo(() => {
-    // Check if we have a custom mapping for this exact path
-    if (routeMapping[pathname]) {
-      return routeMapping[pathname];
+export function useBreadcrumbs(): BreadcrumbItem[] {
+  const pathname = usePathname();
+  const t = useMessages();
+
+  return useMemo(() => {
+    // Reuse the sidebar's route → label mapping (locale-aware for nav keys;
+    // product names such as Material Hub or Tool Kit are identical everywhere).
+    const titles = new Map<string, string>();
+    for (const group of getNavGroups(t.nav)) {
+      for (const item of group.items) {
+        titles.set(item.url, item.title);
+      }
     }
 
-    // If no exact match, fall back to generating breadcrumbs from the path
     const segments = pathname.split('/').filter(Boolean);
     return segments.map((segment, index) => {
-      const path = `/${segments.slice(0, index + 1).join('/')}`;
+      const link = `/${segments.slice(0, index + 1).join('/')}`;
       return {
-        title: segment.charAt(0).toUpperCase() + segment.slice(1),
-        link: path
+        title: routeTitles[link]?.(t) ?? titles.get(link) ?? humanize(segment),
+        link
       };
     });
-  }, [pathname]);
-
-  return breadcrumbs;
+  }, [pathname, t]);
 }
