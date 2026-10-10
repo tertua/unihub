@@ -6,4 +6,4 @@ drf-spectacular
 django-environ
 psycopg[binary]        # PostgreSQL driver — in use since the scaffolding phase
 PyJWT                  # service-account RS256 token signing (Drive integration)
-cryptography>=42       # crypto backend required by PyJWT for RS256
+cryptography>=50.0.2       # crypto backend required by PyJWT for RS256
